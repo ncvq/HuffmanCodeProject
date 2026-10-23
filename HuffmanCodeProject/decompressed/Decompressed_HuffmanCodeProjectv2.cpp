@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <windows.h>
 using namespace std;
 
 struct Node{
@@ -32,7 +33,6 @@ public:
             p->next = NULL;
         }
     }
-
     void enqueue(Node* p){
         p->next = NULL;
         if(front == NULL || front->freq > p->freq){
@@ -47,7 +47,6 @@ public:
         p->next = q->next;
         q->next = p;
     }
-
     Node* dequeue(){
         if(front == NULL) {
             return NULL;
@@ -57,23 +56,19 @@ public:
         p->next = NULL;
         return p;
     }
-
     bool isEmpty(){
         return front == NULL;
     }
 };
 
-class Huffman{
+class Compressor{
 private:
     Node* root;
     int freq[256];
     string codes[256];
-    string filename;
     int originalSize;
-
 public:
-    Huffman(string x){
-        filename = x;
+    Compressor(){
         root = NULL;
         for(int i = 0; i < 256; i++){
             freq[i] = 0;
@@ -81,7 +76,7 @@ public:
         }
         originalSize = 0;
     }
-    ~Huffman(){
+    ~Compressor(){
         destroyTree(root);
     }
 
@@ -94,7 +89,7 @@ public:
         delete p;
     }
 
-    void countFrequency(){
+    void countFrequency(string filename){
         for(int i = 0; i < 256; i++){
             freq[i] = 0;
         }
@@ -103,12 +98,16 @@ public:
         ifstream file(filename.c_str());
 
         if(!file){
+            cout << "File not found!" << endl;
+            system("pause");
             return;
         }
         char ch;
         while(file.get(ch)){
             int i = ch;
-            if(i < 0) i += 256;
+            if(i < 0){
+                i += 256;
+            }
             freq[i]++;
             originalSize++;
         }
@@ -118,34 +117,42 @@ public:
     void buildTree(){
         destroyTree(root);
         root = NULL;
-        MinQueue queue;
+        MinQueue qQueue;
         for(int i = 0; i < 256; i++){
             if(freq[i] > 0){
-                Node* newNode = new Node((char)i, freq[i]);
-                queue.enqueue(newNode);
+                Node* p = new Node((char)i, freq[i]);
+                qQueue.enqueue(p);
             }
         }
-        if(queue.isEmpty()) {
+
+        if(qQueue.isEmpty()){
+            cout << "File is empty, nothing to build a tree with!" << endl;
+            system("pause");
             return;
         }
-        Node* first = queue.dequeue();
-        if(queue.isEmpty()){
+
+        Node* first = qQueue.dequeue();
+        if(qQueue.isEmpty()){
             root = new Node('\0', first->freq);
             root->left = first;
         } else {
-            queue.enqueue(first);
+            qQueue.enqueue(first);
             while(true){
-                Node* p = queue.dequeue();
-                if(queue.isEmpty()){
+                Node* p = qQueue.dequeue();
+                if(qQueue.isEmpty()){
                     root = p;
                     break;
                 }
-                Node* q = queue.dequeue();
+                Node* q = qQueue.dequeue();
                 Node* parent = new Node('\0', p->freq + q->freq);
                 parent->left = p;
                 parent->right = q;
-                queue.enqueue(parent);
+                qQueue.enqueue(parent);
             }
+        }
+
+        for(int i = 0; i < 256; i++){
+            codes[i] = "";
         }
         generateCodes(root, "");
     }
@@ -163,8 +170,12 @@ public:
         generateCodes(p->right, str + "1");
     }
 
-    void displayFrequency(){
-        countFrequency();
+    void displayFrequency(string filename){
+        countFrequency(filename);
+        if(originalSize == 0){
+            cout << "File is empty or not found.\n";
+            return;
+        }
         for(int i = 0; i < 256; i++){
             if(freq[i] > 0){
                 if(i == '\n') {
@@ -176,7 +187,7 @@ public:
                 else if(i == '\t') {
                     cout << "Tab";
                 }
-                else {
+                else{
                     cout << (char)i;
                 }
                 cout << " : " << freq[i] << "\n";
@@ -184,8 +195,8 @@ public:
         }
     }
 
-    void displayCodes(){
-        countFrequency();
+    void displayCodes(string filename){
+        countFrequency(filename);
         if(originalSize == 0){
             cout << "File is empty or not found.\n";
             return;
@@ -202,106 +213,153 @@ public:
                 else if(i == '\t') {
                     cout << "Tab";
                 }
-                else {
+                else{
                     cout << (char)i;
                 }
                 cout << " : " << codes[i] << "\n";
             }
         }
     }
-
-    void compress(){
-        countFrequency();
+    void compress(string filename){
+        countFrequency(filename);
         if(originalSize == 0){
             cout << "File is empty or not found.\n";
             return;
         }
-
         buildTree();
-        ifstream currFile(filename.c_str());
-        ofstream resFile("compressed.huf");
+        
+        CreateDirectoryA("huffmancodes", NULL);
+        CreateDirectoryA("compressed", NULL);
+        
+        string huffmanFile = "huffmancodes/HuffmanCodes_" + filename;
+        string compressedFile = "compressed/Compressed_" + filename;
+        
+        ofstream outHuff(huffmanFile.c_str());
+        outHuff << originalSize << "\n";
 
         for(int i = 0; i < 256; i++){
-            resFile << freq[i] << " ";
+            outHuff << freq[i] << " ";
         }
+        outHuff << "\n";
+        outHuff.close();
+        
+        ifstream inFile(filename.c_str());
+        ofstream outCompressed(compressedFile.c_str(), ios::binary);
 
-        resFile << "\n";
         char ch;
-        int currSize = 0;
-
-        while(currFile.get(ch)){
+        char bitBuffer = 0;
+        int bitCount = 0;
+        int totalBits = 0;
+        
+        while(inFile.get(ch)){
             int i = ch;
-            if(i < 0) i += 256;
+            if(i < 0) {
+                i += 256;
+            }
             string code = codes[i];
-            resFile << code;
-            currSize += code.length();
+            for(int i = 0; i < code.length(); i++){
+                if(code[i] == '1'){
+                    bitBuffer = (bitBuffer << 1) | 1;
+                } else {
+                    bitBuffer = (bitBuffer << 1);
+                }
+                bitCount++;
+                totalBits++;
+                if(bitCount == 8){
+                    outCompressed.write(&bitBuffer, 1);
+                    bitBuffer = 0;
+                    bitCount = 0;
+                }
+            }
         }
-
-        currFile.close();
-        resFile.close();
-
-        int newSize = currSize / 8;
-        if(currSize % 8 != 0) {
-            newSize++;
+        if(bitCount > 0){
+            bitBuffer = bitBuffer << (8 - bitCount);
+            outCompressed.write(&bitBuffer, 1);
         }
+        
+        inFile.close();
+        outCompressed.close();
+        
+        int finalBytes = totalBits / 8;
+        if(totalBits % 8 != 0){
+            finalBytes++;
+        }
+        
         cout << "Original Size: " << originalSize << " bytes\n";
-        cout << "Compressed Size (simulated): " << newSize << " bytes\n";
-        double saved = 100.0 - (((double)newSize / originalSize) * 100.0);
+        cout << "Compressed Size: " << finalBytes << " bytes\n";
+        double saved = 100.0 - (((double)finalBytes / originalSize) * 100.0);
         cout << "Space Saved: " << saved << "%\n";
+        cout << "HuffmanCodes saved to: " << huffmanFile << "\n";
+        cout << "Compressed data saved to: " << compressedFile << "\n";
     }
-
-    void decompress(){
-        ifstream currFile("compressed.txt");
-        if(!currFile){
-            cout << "Compressed file not found.\n";
+    void decompress(string filename){
+        string huffmanFile = "huffmancodes/HuffmanCodes_" + filename;
+        string compressedFile = "compressed/Compressed_" + filename;
+        
+        ifstream inMeta(huffmanFile.c_str());
+        if(!inMeta){
+            cout << "HuffmanCodes file not found in huffmancodes/ folder.\n";
             return;
         }
-
+        inMeta >> originalSize;
         for(int i = 0; i < 256; i++) {
             freq[i] = 0;
         }
-
         for(int i = 0; i < 256; i++){
-            currFile >> freq[i];
+            inMeta >> freq[i];
         }
-
-        char ch;
+        inMeta.close();
+        
         buildTree();
         if(root == NULL){
-            currFile.close();
             return;
         }
-
-        ofstream resFile("decompressed.txt");
+        
+        ifstream inBin(compressedFile.c_str(), ios::binary);
+        if(!inBin){
+            cout << "Compressed binary file not found in compressed/ folder.\n";
+            return;
+        }
+        
+        CreateDirectoryA("decompressed", NULL);
+        string outFileStr = "decompressed/Decompressed_" + filename;
+        ofstream outFile(outFileStr.c_str());
+        
+        char byte;
+        int charsWritten = 0;
         Node* p = root;
-        while(currFile.get(ch)){
-            if(ch != '0' && ch != '1') {
-                continue;
-            }
-            if(ch == '0') {
-                p = p->left;
-            }
-            else if(ch == '1') {
-                p = p->right;
-            }
-            if(p->left == NULL && p->right == NULL){
-                resFile << p->data;
-                p = root;
+        
+        while(inBin.read(&byte, 1) && charsWritten < originalSize){
+            for(int i = 7; i >= 0; i--){
+                int bit = (byte & (1 << i)) ? 1 : 0;
+                if(bit == 0) {
+                    p = p->left;
+                }
+                else if(bit == 1) {
+                    p = p->right;
+                }
+                
+                if(p->left == NULL && p->right == NULL){
+                    outFile << p->data;
+                    charsWritten++;
+                    p = root;
+                    if(charsWritten == originalSize) {
+                        break;
+                    }
+                }
             }
         }
-
-        currFile.close();
-        resFile.close();
-        cout << "File decompressed to decompressed.txt successfully.\n";
+        inBin.close();
+        outFile.close();
+        cout << "File decompressed to " << outFileStr << " successfully.\n";
     }
 };
 
 int main(){
-    string filename;
-    cout << "Enter file to select: ";
-    cin >> filename;
-    Huffman h(filename);
+    Compressor compressor;
     int choice;
+    string file1;
+    
     while(true){
         system("cls");
         cout << "===== HUFFMAN COMPRESSION =====\n";
@@ -312,25 +370,36 @@ int main(){
         cout << "5. Exit\n";
         cout << "Input: ";
         cin >> choice;
+        
         switch(choice){
             case 1:
                 system("cls");
-                h.displayFrequency();
+                cout << "Enter file to analyze: ";
+                cin >> file1;
+                compressor.displayFrequency(file1);
                 system("pause");
                 break;
             case 2:
                 system("cls");
-                h.displayCodes();
+                cout << "Enter file for Huffman codes: ";
+                cin >> file1;
+                compressor.displayCodes(file1);
                 system("pause");
                 break;
             case 3:
                 system("cls");
-                h.compress();
+                cout << "Enter file to compress: ";
+                cin >> file1;
+                cout << "\n";
+                compressor.compress(file1);
                 system("pause");
                 break;
             case 4:
                 system("cls");
-                h.decompress();
+                cout << "Enter original filename to decompress: ";
+                cin >> file1;
+                cout << "\n";
+                compressor.decompress(file1);
                 system("pause");
                 break;
             case 5:
