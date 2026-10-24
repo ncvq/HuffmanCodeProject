@@ -26,13 +26,6 @@ class MinQueue{
         MinQueue(){
             front = NULL;
         }
-        ~MinQueue(){
-            while(front != NULL){
-                Node* p = front;
-                front = front->next;
-                p->next = NULL;
-            }
-        }
         void enqueue(Node* p);
         Node* dequeue();
         bool isEmpty();
@@ -70,26 +63,23 @@ bool MinQueue ::  isEmpty(){
 class HuffmanCode{
     private:
         Node* root;
-        int freq[256];
+        int freq[256] = {0};
         string codes[256];
         int originalSize;
         
     public:
         HuffmanCode(){
             root = NULL;
-            for(int i = 0; i < 256; i++){
-                freq[i] = 0;
-                codes[i] = "";
-            }
             originalSize = 0;
         }
         ~HuffmanCode(){
             destroyTree(root);
         }
         void destroyTree(Node* p);
-        void countFrequency(string filename);
+        bool countFrequency(string filename);
         void buildTree();
         void generateCodes(Node* p, string str);
+        void displayChar(int i);
         void displayFrequency(string filename);
         void displayCodes(string filename);
         void showStats(int totalBits, string compressedFile);
@@ -109,29 +99,28 @@ void HuffmanCode :: destroyTree(Node* p){
     delete p;
 }
 
-void HuffmanCode :: countFrequency(string filename){
+bool HuffmanCode :: countFrequency(string filename){
     for(int i = 0; i < 256; i++){
         freq[i] = 0;
     }
 
     originalSize = 0;
-    ifstream file(filename.c_str());
+    ifstream file(filename);
 
-    if(!file){
-        cout << "File not found!" << endl;
-        system("pause");
-        return;
-    }
-    char ch;
-    while(file.get(ch)){
-        int i = ch;
-        if(i < 0){
-            i += 256;
+    if(file){
+        char ch;
+        while(file.get(ch)){
+            freq[ch]++;
+            originalSize++;
         }
-        freq[i]++;
-        originalSize++;
+        file.close();
     }
-    file.close();
+    
+    if(originalSize == 0){
+        cout << "File is empty or not found.\n";
+        return false;
+    }
+    return true;
 }
 
 void HuffmanCode :: buildTree(){
@@ -147,7 +136,6 @@ void HuffmanCode :: buildTree(){
 
     if(qQueue.isEmpty()){
         cout << "File is empty, nothing to build a tree with!" << endl;
-        system("pause");
         return;
     }
 
@@ -182,62 +170,47 @@ void HuffmanCode :: generateCodes(Node* p, string str){
         return;
     }
     if(p->left == NULL && p->right == NULL){
-        int i = p->data;
-        if(i < 0) {
-            i += 256;
-        }
-        codes[i] = str;
+        codes[p->data] = str;
     }
     generateCodes(p->left, str + "0");
     generateCodes(p->right, str + "1");
 }
 
+void HuffmanCode :: displayChar(int i){
+    if(i == '\n') {
+        cout << "Newline";
+    }
+    else if(i == ' ') {
+        cout << "Space";
+    }
+    else if(i == '\t') {
+        cout << "Tab";
+    }
+    else{
+        cout << (char)i;
+    }
+}
+
 void HuffmanCode :: displayFrequency(string filename){
-    countFrequency(filename);
-    if(originalSize == 0){
-        cout << "File is empty or not found.\n";
+    if(!countFrequency(filename)){
         return;
     }
     for(int i = 0; i < 256; i++){
         if(freq[i] > 0){
-            if(i == '\n') {
-                cout << "Newline";
-            }
-            else if(i == ' ') {
-                cout << "Space";
-            }
-            else if(i == '\t') {
-                cout << "Tab";
-            }
-            else{
-                cout << (char)i;
-            }
+            displayChar(i);
             cout << " : " << freq[i] << "\n";
         }
     }
 }
 
 void HuffmanCode :: displayCodes(string filename){
-    countFrequency(filename);
-    if(originalSize == 0){
-        cout << "File is empty or not found.\n";
+    if(!countFrequency(filename)){
         return;
     }
     buildTree();
     for(int i = 0; i < 256; i++){
         if(freq[i] > 0){
-            if(i == '\n') {
-                cout << "Newline";
-            }
-            else if(i == ' ') {
-                cout << "Space";
-            }
-            else if(i == '\t') {
-                cout << "Tab";
-            }
-            else{
-                cout << (char)i;
-            }
+            displayChar(i);
             cout << " : " << codes[i] << "\n";
         }
     }
@@ -260,7 +233,7 @@ void HuffmanCode :: save(string filename){
     CreateDirectoryA("compressed", NULL);
     
     string compressedFile = "compressed/Compressed_" + filename;
-    ofstream outCompressed(compressedFile.c_str(), ios::binary);
+    ofstream outCompressed(compressedFile, ios::binary);
 
     outCompressed << originalSize << "\n";
 
@@ -272,7 +245,7 @@ void HuffmanCode :: save(string filename){
     }
     outCompressed << "\n";
     
-    ifstream inFile(filename.c_str());
+    ifstream inFile(filename);
 
     char ch;
     char bitBuffer = 0;
@@ -280,16 +253,11 @@ void HuffmanCode :: save(string filename){
     int totalBits = 0;
     
     while(inFile.get(ch)){
-        int i = ch;
-        if(i < 0) {
-            i += 256;
-        }
-        string code = codes[i];
+        string code = codes[ch];
         for(int i = 0; i < code.length(); i++){
+            bitBuffer = bitBuffer << 1;
             if(code[i] == '1'){
-                bitBuffer = (bitBuffer << 1) | 1;
-            } else {
-                bitBuffer = (bitBuffer << 1);
+                bitBuffer = bitBuffer | 1;
             }
             bitCount++;
             totalBits++;
@@ -313,7 +281,7 @@ void HuffmanCode :: save(string filename){
 
 bool HuffmanCode :: retrieve(string filename){
     string compressedFile = "compressed/Compressed_" + filename;
-    ifstream inMeta(compressedFile.c_str());
+    ifstream inMeta(compressedFile);
     
     if(!inMeta){
         cout << "Compressed file not found in compressed/ folder.\n";
@@ -321,9 +289,6 @@ bool HuffmanCode :: retrieve(string filename){
     }
     
     inMeta >> originalSize;
-    for(int i = 0; i < 256; i++) {
-        freq[i] = 0;
-    }
     for(int i = 0; i < 256; i++){
         inMeta >> freq[i];
     }
@@ -333,9 +298,7 @@ bool HuffmanCode :: retrieve(string filename){
 }
 
 void HuffmanCode :: compress(string filename){
-    countFrequency(filename);
-    if(originalSize == 0){
-        cout << "File is empty or not found.\n";
+    if(!countFrequency(filename)){
         return;
     }
     buildTree();
@@ -353,29 +316,15 @@ void HuffmanCode :: decompress(string filename){
     }
     
     string compressedFile = "compressed/Compressed_" + filename;
-    ifstream inBin(compressedFile.c_str(), ios::binary);
-    if(!inBin){
-        cout << "Compressed binary file not found in compressed/ folder.\n";
-        return;
-    }
+    ifstream inBin(compressedFile, ios::binary);
     
-    int dummySize;
-    inBin >> dummySize;
-    for(int i = 0; i < 256; i++){
-        int dummyFreq;
-        inBin >> dummyFreq;
-    }
-    
-    char skipCh;
-    while(inBin.get(skipCh)){
-        if(skipCh == '\n'){
-            break;
-        }
-    }
+    string header;
+    getline(inBin, header);
+    getline(inBin, header);
     
     CreateDirectoryA("decompressed", NULL);
     string outFileStr = "decompressed/Decompressed_" + filename;
-    ofstream outFile(outFileStr.c_str());
+    ofstream outFile(outFileStr);
     
     char byte;
     int charsWritten = 0;
@@ -383,12 +332,11 @@ void HuffmanCode :: decompress(string filename){
     
     while(inBin.read(&byte, 1) && charsWritten < originalSize){
         for(int i = 7; i >= 0; i--){
-            int bit = (byte & (1 << i)) ? 1 : 0;
-            if(bit == 0) {
-                p = p->left;
-            }
-            else if(bit == 1) {
+            if(byte & (1 << i)){
                 p = p->right;
+            }
+            else {
+                p = p->left;
             }
             
             if(p->left == NULL && p->right == NULL){
@@ -407,85 +355,65 @@ void HuffmanCode :: decompress(string filename){
 }
 
 void HuffmanCode :: checkIntegrity(string filename){
-    int freqOrig[256];
-    int freqDecomp[256];
-    int sizeOrig = 0;
-    int sizeDecomp = 0;
+    int freqDecomp[256] = {0};
+    int decompSize = 0;
+    bool sameOrder = true;
+    bool freqMatch = true;
     
-    for(int i = 0; i < 256; i++){
-        freqOrig[i] = 0;
-        freqDecomp[i] = 0;
-    }
-    
-    ifstream fileOrig(filename.c_str());
-    if(!fileOrig){
-        cout << "Original file not found for integrity check.\n";
+    if(!countFrequency(filename)){
         return;
     }
-    char ch;
-    while(fileOrig.get(ch)){
-        int i = ch;
-        if(i < 0){
-            i += 256;
-        }
-        freqOrig[i]++;
-        sizeOrig++;
-    }
-    fileOrig.close();
     
     string decompFile = "decompressed/Decompressed_" + filename;
-    ifstream fileDecomp(decompFile.c_str());
+    ifstream fileOrig(filename);
+    ifstream fileDecomp(decompFile);
+    
     if(!fileDecomp){
         cout << "Decompressed file not found. Please decompress first.\n";
         return;
     }
-    while(fileDecomp.get(ch)){
-        int i = ch;
-        if(i < 0){
-            i += 256;
+    
+    char ch1, ch2;
+    while(fileDecomp.get(ch2)){
+        freqDecomp[ch2]++;
+        decompSize++;
+        if(!fileOrig.get(ch1) || ch1 != ch2){
+            sameOrder = false;
         }
-        freqDecomp[i]++;
-        sizeDecomp++;
     }
+    
+    fileOrig.close();
     fileDecomp.close();
     
     cout << "========================================\n";
     cout << "Char\tOriginal\tDecompressed\n";
     cout << "========================================\n";
     
-    bool isIdentical = true;
-    if(sizeOrig != sizeDecomp){
-        isIdentical = false;
-    }
-    
     for(int i = 0; i < 256; i++){
-        if(freqOrig[i] > 0 || freqDecomp[i] > 0){
-            if(freqOrig[i] != freqDecomp[i]){
-                isIdentical = false;
+        if(freq[i] > 0 || freqDecomp[i] > 0){
+            displayChar(i);
+            cout << "\t" << freq[i] << "\t\t" << freqDecomp[i] << "\n";
+            if(freq[i] != freqDecomp[i]){
+                freqMatch = false;
             }
-            
-            if(i == '\n'){
-                cout << "NewLine\t";
-            }
-            else if(i == ' '){
-                cout << "Space\t";
-            }
-            else if(i == '\t'){
-                cout << "Tab\t";
-            }
-            else {
-                cout << (char)i << "\t";
-            }
-            cout << freqOrig[i] << "\t\t" << freqDecomp[i] << "\n";
         }
     }
     
     cout << "========================================\n";
-    if(isIdentical){
+    if(originalSize == decompSize && freqMatch && sameOrder){
         cout << "Result: Integrity Check Passed! Files are identical.\n";
     }
     else {
         cout << "Result: Integrity Check Failed! Files do not match.\n";
+        if(originalSize != decompSize){
+            cout << "Error: Files are not the same size.\n";
+        }
+        if(!freqMatch){
+            cout << "Error: Character frequencies do not match.\n";
+        }
+        else if(!sameOrder){
+            cout << "Error: Same character frequency but different arrangement found.\n";
+        }
     }
 }
 
@@ -506,52 +434,42 @@ int main(){
         cout << "Input: ";
         cin >> choice;
         
+        system("cls");
         switch(choice){
             case 1:
-                system("cls");
                 cout << "Enter file to analyze: ";
                 cin >> file1;
                 h.displayFrequency(file1);
-                system("pause");
                 break;
             case 2:
-                system("cls");
                 cout << "Enter file for Huffman codes: ";
                 cin >> file1;
                 h.displayCodes(file1);
-                system("pause");
                 break;
             case 3:
-                system("cls");
                 cout << "Enter file to compress: ";
                 cin >> file1;
                 cout << "\n";
                 h.compress(file1);
-                system("pause");
                 break;
             case 4:
-                system("cls");
                 cout << "Enter original filename to decompress: ";
                 cin >> file1;
                 cout << "\n";
                 h.decompress(file1);
-                system("pause");
                 break;
             case 5:
-                system("cls");
                 cout << "Enter original filename to verify integrity: ";
                 cin >> file1;
                 cout << "\n";
                 h.checkIntegrity(file1);
-                system("pause");
                 break;
             case 6:
                 exit(0);
             default:
                 cout << "Invalid Input.\n";
-                system("pause");
                 break;
         }
+        system("pause");
     }
-    return 0;
 }
